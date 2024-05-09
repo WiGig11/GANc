@@ -402,7 +402,7 @@ for i in range(len(dirs)):
 newlogdir = 'runs'+str(max+1)
 
 summary_writer = tf.summary.create_file_writer(os.path.join(logdir,newlogdir))    # 参数为记录文件所保存的目录
-image_dir = '/chz/kodak/'
+image_dir = '/chz/Kodak/'
 
 # 创建一个数据集，其中包含图像文件的路径
 list_ds = tf.data.Dataset.list_files(image_dir + '*.png', shuffle=False)
