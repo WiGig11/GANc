@@ -36,6 +36,7 @@ from absl.flags import argparse_flags
 import tensorflow as tf
 import tensorflow_compression as tfc
 import tensorflow_datasets as tfds
+from tensorflow_addons.layers import InstanceNormalization
 from utils import ContinuousBatchedEntropyModelchz,LocationScaleIndexedEntropyModel
 import pdb
 
@@ -97,7 +98,135 @@ class AnalysisTransform(tf.keras.Sequential):
             activation=tfc.GDN(name="gdn_5")))
         self.add(tf.keras.layers.ReLU())
 
+class MainLine(tf.keras.Sequential):
+    def __init__(self,idx,padsize,numfilters1,kernelsize1,stride1,se_factor,numfilters2,kernelsize2,stride2):
+        super().__init__(name="resblockmainline")
+        self.add(tf.keras.layers.Lambda(mypad,arguments={'size':padsize},name = str(idx)+"_res1"))
+        self.add(tf.keras.layers.Conv2D(
+            numfilters1, kernel_size = kernelsize1, strides = stride1,name=str(idx)+"_layer_1",
+            activation=tfc.GDN(inverse = True, name=str(idx)+"_gdn_1")))
+        self.add(tf.keras.layers.ReLU())
+        self.add(tf.keras.layers.GlobalAveragePooling2D())
+        self.add(tf.keras.layers.Dense(numfilters1//se_factor, activation='relu'))
+        self.add(tf.keras.layers.Dense(960, activation='sigmoid'))
+        self.add(tf.keras.layers.Reshape((1, 1, numfilters1)))
+        self.add(tf.keras.layers.Lambda(lambda inputs: inputs[0] * inputs[1]))
+        self.add(tf.keras.layers.Lambda(mypad,arguments={'size':padsize},name = str(idx)+"_res2"))
+        self.add(tf.keras.layers.Conv2D(
+            numfilters2, kernel_size = kernelsize2, strides = stride2,name=str(idx)+"_layer_2",
+            activation=tfc.GDN(inverse = True, name=str(idx)+"_gdn_2")))
 
+class ResConnectionGen(tf.keras.Model):
+    """The Resblock part transform."""
+    def __init__(self):
+        super().__init__(name="res")
+        self.conv_blocks1 = MainLine(idx = 1,
+                                        padsize = 1,numfilters1 = 960,kernelsize1=[3,3],stride1=[1,1],
+                                    se_factor=16,
+                                    numfilters2=960,kernelsize2=[3,3],stride2=[1,1])
+        self.conv_blocks2 = MainLine(idx = 2,
+                                        padsize = 1,numfilters1 = 960,kernelsize1=[3,3],stride1=[1,1],
+                                    se_factor=16,
+                                    numfilters2=960,kernelsize2=[3,3],stride2=[1,1])
+        self.conv_blocks3 = MainLine(idx = 3,
+                                        padsize = 1,numfilters1 = 960,kernelsize1=[3,3],stride1=[1,1],
+                                    se_factor=16,
+                                    numfilters2=960,kernelsize2=[3,3],stride2=[1,1])
+        self.conv_blocks4 = MainLine(idx = 4,
+                                        padsize = 1,numfilters1 = 960,kernelsize1=[3,3],stride1=[1,1],
+                                    se_factor=16,
+                                    numfilters2=960,kernelsize2=[3,3],stride2=[1,1])
+        self.conv_blocks5 = MainLine(idx = 5,
+                                        padsize = 1,numfilters1 = 960,kernelsize1=[3,3],stride1=[1,1],
+                                    se_factor=16,
+                                    numfilters2=960,kernelsize2=[3,3],stride2=[1,1])
+        self.conv_blocks6 = MainLine(idx = 6,
+                                        padsize = 1,numfilters1 = 960,kernelsize1=[3,3],stride1=[1,1],
+                                    se_factor=16,
+                                    numfilters2=960,kernelsize2=[3,3],stride2=[1,1])
+        self.conv_blocks7 = MainLine(idx = 7,
+                                        padsize = 1,numfilters1 = 960,kernelsize1=[3,3],stride1=[1,1],
+                                    se_factor=16,
+                                    numfilters2=960,kernelsize2=[3,3],stride2=[1,1])
+        self.conv_blocks8 = MainLine(idx = 8,
+                                        padsize = 1,numfilters1 = 960,kernelsize1=[3,3],stride1=[1,1],
+                                    se_factor=16,
+                                    numfilters2=960,kernelsize2=[3,3],stride2=[1,1])
+        self.conv_blocks9 = MainLine(idx = 9,
+                                        padsize = 1,numfilters1 = 960,kernelsize1=[3,3],stride1=[1,1],
+                                    se_factor=16,
+                                    numfilters2=960,kernelsize2=[3,3],stride2=[1,1])
+
+    def call(self, inputs):
+        x = self.conv_blocks1(inputs)
+        add_layer = tf.keras.layers.Add()
+        inputs = add_layer([x, inputs])  # Ensure inputs to Add() are wrapped in a list
+        x = self.conv_blocks2(inputs)
+        add_layer = tf.keras.layers.Add()
+        inputs = add_layer([x, inputs])
+        x = self.conv_blocks3(inputs)
+        add_layer = tf.keras.layers.Add()
+        inputs = add_layer([x, inputs])
+        x = self.conv_blocks4(inputs)
+        add_layer = tf.keras.layers.Add()
+        inputs = add_layer([x, inputs])
+        x = self.conv_blocks5(inputs)
+        add_layer = tf.keras.layers.Add()
+        inputs = add_layer([x, inputs])
+        x = self.conv_blocks6(inputs)
+        add_layer = tf.keras.layers.Add()
+        inputs = add_layer([x, inputs])
+        x = self.conv_blocks7(inputs)
+        add_layer = tf.keras.layers.Add()
+        inputs = add_layer([x, inputs])
+        x = self.conv_blocks8(inputs)
+        add_layer = tf.keras.layers.Add()
+        inputs = add_layer([x, inputs])
+        x = self.conv_blocks9(inputs)
+        add_layer = tf.keras.layers.Add()
+        inputs = add_layer([x, inputs])
+        return inputs
+
+class generatorend(tf.keras.Sequential):
+    def __init__(self):
+        super().__init__(name="generator ender ")
+        self.add(tf.keras.layers.Conv2DTranspose(480, kernel_size = [3,3], strides = [2,2], padding = 'same'))
+        self.add(InstanceNormalization())
+        self.add(tf.keras.layers.ReLU())
+        self.add(tf.keras.layers.Conv2DTranspose(240, kernel_size = [3,3], strides = [2,2], padding = 'same'))
+        self.add(InstanceNormalization())
+        self.add(tf.keras.layers.ReLU())
+        self.add(tf.keras.layers.Conv2DTranspose(120, kernel_size = [3,3], strides = [2,2], padding = 'same'))
+        self.add(InstanceNormalization())
+        self.add(tf.keras.layers.ReLU())
+        self.add(tf.keras.layers.Conv2DTranspose(60, kernel_size = [3,3], strides = [2,2], padding = 'same'))
+        self.add(InstanceNormalization())
+        self.add(tf.keras.layers.ReLU())
+        self.add(tf.keras.layers.Lambda(mypad,arguments={'size':3}))
+        self.add(tf.keras.layers.Conv2D(3,kernel_size = (7,7),strides = (1,1),padding = 'valid'))
+        self.add(InstanceNormalization())
+        self.add(tf.keras.layers.Activation(tf.keras.activations.tanh))                            
+
+class SynthesisTransformchz(tf.keras.Model):
+    """The synthesis transform."""
+    def __init__(self):
+        super().__init__(name="synthesis")
+        self.resblock  = ResConnectionGen()
+        self.pad1 = tf.keras.layers.Lambda(mypad,arguments={'size':1})
+        self.conv1 = tf.keras.layers.Conv2D(960,kernel_size=(3,3),strides=(1,1),padding='VALID')
+        self.Norm1 = InstanceNormalization()
+        self.activation1 = tf.keras.layers.ReLU()
+        self.generatorend = generatorend()
+
+    def call(self, inputs):
+        y = self.pad1(inputs)
+        y = self.conv1(y)
+        y = self.Norm1(y)
+        y = self.activation1(y)
+        y = self.resblock(y)
+        y = self.generatorend(y)
+        return y
+    
 class SynthesisTransform(tf.keras.Sequential):
   """The synthesis transform."""
 
@@ -172,10 +301,10 @@ class BMSHJ2018Model(tf.keras.Model):
         num_scales - 1.)
     self.scale_fn = lambda i: tf.math.exp(offset + factor * i)
     self.analysis_transform = AnalysisTransform(Bottleneck=8)
-    self.synthesis_transform = SynthesisTransform(num_filters)
-    self.hyper_analysis_transform = HyperAnalysisTransform(192)
-    self.hyper_synthesis_transform = HyperSynthesisTransform(192)
-    self.hyperprior = tfc.NoisyDeepFactorized(batch_shape=(num_filters,))
+    self.synthesis_transform = SynthesisTransformchz()
+    self.hyper_analysis_transform = HyperAnalysisTransform(8)
+    self.hyper_synthesis_transform = HyperSynthesisTransform(8)
+    self.hyperprior = tfc.NoisyDeepFactorized(batch_shape=(8,))
     self.build((None, None, None, 3))
 
   def call(self, x, training):
@@ -189,8 +318,13 @@ class BMSHJ2018Model(tf.keras.Model):
     x = tf.cast(x, self.compute_dtype)  # TODO(jonycgn): Why is this necessary?
     y = self.analysis_transform(x)
     z = self.hyper_analysis_transform(abs(y))
+    print("z.shape",z.shape)
+    print("z.type",type(z))
     z_hat, side_bits = side_entropy_model(z, training=training)
+    print("zhat",z_hat)
+    print("side_bits",side_bits)
     indexes = self.hyper_synthesis_transform(z_hat)
+    print("indexes",indexes)
     y_hat, bits = entropy_model(y, indexes, training=training)
     x_hat = self.synthesis_transform(y_hat)
 
